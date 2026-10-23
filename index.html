@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>交通費入力</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="交通費">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f4f5f7">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #fff; --text: #1d2228; --sub: #6b7480;
+    --line: #e1e4e8; --accent: #334a5e; --danger: #c0392b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #15181c; --card: #1f2329; --text: #eceff2; --sub: #9aa3ad; --line: #333a42; --accent: #5d7d9a; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    padding: calc(16px + env(safe-area-inset-top)) 16px calc(40px + env(safe-area-inset-bottom));
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif; font-size: 16px;
+  }
+  h1 { font-size: 18px; margin: 4px 0 14px; display: flex; justify-content: space-between; align-items: center; }
+  h1 button { border: 0; background: none; color: var(--sub); font-size: 13px; }
+  .card { background: var(--card); border-radius: 14px; padding: 16px; margin-bottom: 14px; }
+  label { display: block; font-size: 13px; color: var(--sub); margin: 12px 0 6px; }
+  label:first-child { margin-top: 0; }
+  input, textarea {
+    width: 100%; font-size: 17px; padding: 12px; border: 1px solid var(--line); border-radius: 10px;
+    background: var(--bg); color: var(--text); font-family: inherit; -webkit-appearance: none; appearance: none;
+  }
+  input[type="date"] { min-height: 48px; }
+  textarea { min-height: 64px; resize: vertical; }
+  .date-row { display: flex; gap: 8px; }
+  .date-row input { flex: 1; min-width: 0; }
+  .chip {
+    border: 1px solid var(--line); background: var(--card); color: var(--text);
+    border-radius: 10px; padding: 0 14px; font-size: 14px; white-space: nowrap;
+  }
+  .amount { position: relative; }
+  .amount span { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--sub); }
+  .amount input { padding-left: 30px; }
+  button.submit {
+    width: 100%; margin-top: 18px; padding: 15px; font-size: 17px; font-weight: 600;
+    border: 0; border-radius: 12px; background: var(--accent); color: #fff;
+  }
+  button.submit:disabled { opacity: .5; }
+  .total { display: flex; justify-content: space-between; align-items: baseline; }
+  .total b { font-size: 26px; font-variant-numeric: tabular-nums; }
+  .month { color: var(--sub); font-size: 14px; }
+  ul { list-style: none; margin: 12px 0 0; padding: 0; }
+  li { display: flex; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+  li .d { color: var(--sub); width: 44px; font-size: 14px; flex-shrink: 0; }
+  li .t { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  li .t small { display: block; color: var(--sub); font-size: 12px; }
+  li .a { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  li button { border: 0; background: none; color: var(--danger); font-size: 13px; padding: 4px; }
+  .empty { color: var(--sub); font-size: 14px; margin-top: 10px; }
+  .hint { color: var(--sub); font-size: 13px; line-height: 1.6; margin: 0 0 4px; }
+  .toast {
+    position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+    background: #222; color: #fff; padding: 10px 18px; border-radius: 20px; font-size: 14px;
+    opacity: 0; transition: opacity .2s; pointer-events: none; white-space: nowrap;
+  }
+  .toast.show { opacity: 1; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+  <!-- 初回だけ表示：合言葉の登録 -->
+  <section id="setup" hidden>
+    <h1>交通費・立替の入力</h1>
+    <form class="card" id="setupForm" autocomplete="off">
+      <p class="hint">最初に合言葉を登録してください。一度登録すれば、この端末では次から入力不要です。</p>
+      <label for="token">合言葉</label>
+      <input id="token" autocapitalize="off" autocorrect="off" spellcheck="false" required>
+      <button class="submit" type="submit">登録する</button>
+    </form>
+  </section>
+
+  <section id="main" hidden>
+    <h1>交通費・立替の入力 <button type="button" id="reset">合言葉の再登録</button></h1>
+
+    <form class="card" id="form" autocomplete="off">
+      <label for="date">日付</label>
+      <div class="date-row">
+        <input type="date" id="date" required>
+        <button type="button" class="chip" id="today">今日</button>
+      </div>
+
+      <label for="title">件名</label>
+      <input id="title" list="titles" placeholder="例：渋谷→新宿 往復、備品購入" required>
+      <datalist id="titles"></datalist>
+
+      <label for="amount">金額</label>
+      <div class="amount"><span>¥</span><input id="amount" type="number" inputmode="numeric" min="1" step="1" required></div>
+
+      <label for="note">備考</label>
+      <textarea id="note" placeholder="任意"></textarea>
+
+      <button class="submit" id="submit" type="submit">スプレッドシートに送る</button>
+    </form>
+
+    <div class="card">
+      <div class="total">
+        <div>今月の精算額 <span class="month" id="month"></span></div>
+        <b id="total">…</b>
+      </div>
+      <ul id="list"></ul>
+      <div class="empty" id="empty" hidden>今月の入力はまだありません</div>
+    </div>
+  </section>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+  // Apps Script を「ウェブアプリ」としてデプロイしたときの URL
+  const API_URL = 'https://script.google.com/macros/s/AKfycbyAmemJ2FijdYMrQ_znuJMazRIe9X0HPqNup9eLHKzz7oTnIiHDHAg1sh_SqPG3OORMzQ/exec';
+  const TOKEN_KEY = 'koeru-expense-token';
+
+  const $ = (id) => document.getElementById(id);
+  const yen = (n) => '¥' + Number(n).toLocaleString('ja-JP');
+
+  function getToken() {
+    try { return localStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return ''; }
+  }
+  function setToken(v) {
+    try { v ? localStorage.setItem(TOKEN_KEY, v) : localStorage.removeItem(TOKEN_KEY); } catch (e) {}
+  }
+
+  function todayStr() {
+    const d = new Date();
+    const p = (n) => String(n).padStart(2, '0');
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+  }
+
+  function toast(msg) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2200);
+  }
+
+  function esc(s) {
+    return String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  }
+
+  // Content-Type を付けない（text/plain の単純なリクエストにして、Apps Script 側の CORS 制限を避ける）
+  async function api(body) {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      body: JSON.stringify(Object.assign({ token: getToken() }, body)),
+    });
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error);
+    return json.data;
+  }
+
+  function render(s) {
+    $('month').textContent = '（' + s.month + '）';
+    $('total').textContent = yen(s.total);
+    $('list').innerHTML = s.items.map((it) =>
+      '<li><span class="d">' + esc(it.date) + '</span>' +
+      '<span class="t">' + esc(it.title) + (it.note ? '<small>' + esc(it.note) + '</small>' : '') + '</span>' +
+      '<span class="a">' + yen(it.amount) + '</span>' +
+      (it.stamp ? '<button data-row="' + it.row + '" data-stamp="' + it.stamp + '">削除</button>' : '') + '</li>'
+    ).join('');
+    $('empty').hidden = s.items.length > 0;
+    $('titles').innerHTML = s.titles.map((t) => '<option value="' + esc(t) + '">').join('');
+  }
+
+  function showError(err) {
+    const msg = err && err.message ? err.message : String(err);
+    if (msg === '合言葉が違います') {
+      setToken('');
+      showScreen();
+    }
+    alert(msg === 'Failed to fetch' || msg === 'Load failed'
+      ? '送信できませんでした。電波の良いところでもう一度お試しください。'
+      : msg);
+  }
+
+  async function refresh() {
+    try { render(await api({ action: 'summary' })); } catch (e) { showError(e); }
+  }
+
+  function showScreen() {
+    const has = !!getToken();
+    $('setup').hidden = has;
+    $('main').hidden = !has;
+    if (has) refresh();
+  }
+
+  $('setupForm').onsubmit = (e) => {
+    e.preventDefault();
+    setToken($('token').value.trim());
+    showScreen();
+  };
+
+  $('reset').onclick = () => {
+    if (!confirm('合言葉を登録し直しますか？')) return;
+    setToken('');
+    showScreen();
+  };
+
+  $('date').value = todayStr();
+  $('today').onclick = () => { $('date').value = todayStr(); };
+
+  $('form').onsubmit = async (e) => {
+    e.preventDefault();
+    $('submit').disabled = true;
+    try {
+      render(await api({
+        action: 'add',
+        entry: { date: $('date').value, title: $('title').value, amount: $('amount').value, note: $('note').value },
+      }));
+      $('title').value = '';
+      $('amount').value = '';
+      $('note').value = '';
+      toast('送信しました');
+    } catch (err) {
+      showError(err);
+    }
+    $('submit').disabled = false;
+  };
+
+  $('list').onclick = async (e) => {
+    const b = e.target.closest('button[data-row]');
+    if (!b) return;
+    const name = b.parentElement.querySelector('.t').firstChild.textContent;
+    if (!confirm('「' + name + '」を削除しますか？')) return;
+    try {
+      render(await api({ action: 'delete', row: Number(b.dataset.row), stamp: Number(b.dataset.stamp) }));
+      toast('削除しました');
+    } catch (err) {
+      showError(err);
+    }
+  };
+
+  // 開きっぱなしで日付が変わっても、画面に戻ったら今日の日付と今月の内容に直す
+  let lastDay = todayStr();
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible' || !getToken()) return;
+    if (todayStr() !== lastDay) {
+      lastDay = todayStr();
+      $('date').value = lastDay;
+      refresh();
+    }
+  });
+
+  showScreen();
+</script>
+</body>
+</html>
